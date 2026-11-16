@@ -7,6 +7,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
+import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -21,6 +22,7 @@ import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.VideoView;
 import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
@@ -64,6 +66,8 @@ public class MainActivity extends Activity {
     private TextView greeting;
     private TextView dateView;
     private SharedPreferences prefs;
+    private VideoView video;
+    private View poster;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -74,6 +78,9 @@ public class MainActivity extends Activity {
         grid = findViewById(R.id.grid);
         drawer = findViewById(R.id.drawer);
         dock = findViewById(R.id.dock);
+        video = findViewById(R.id.video);
+        poster = findViewById(R.id.poster);
+        setupVideo();
         greeting = findViewById(R.id.greeting);
         dateView = findViewById(R.id.date);
 
@@ -93,9 +100,32 @@ public class MainActivity extends Activity {
                 drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
     }
 
+    private void setupVideo() {
+        try {
+            video.setVideoURI(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.bg));
+            video.setOnPreparedListener(mp -> {
+                mp.setLooping(true);
+                mp.setVolume(0f, 0f);
+                mp.setOnInfoListener((m, what, extra) -> {
+                    if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                        poster.setVisibility(View.GONE);
+                    }
+                    return false;
+                });
+            });
+            video.setOnErrorListener((mp, what, extra) -> {
+                poster.setVisibility(View.VISIBLE); // видео не заработало: остаётся картинка
+                return true;
+            });
+        } catch (Exception e) {
+            poster.setVisibility(View.VISIBLE);
+        }
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
+        try { video.start(); } catch (Exception ignored) { }
         handler.removeCallbacks(tick);
         handler.post(tick);
         loadAppsAsync();
@@ -103,6 +133,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onPause() {
+        try { video.pause(); } catch (Exception ignored) { }
         handler.removeCallbacks(tick);
         super.onPause();
     }
