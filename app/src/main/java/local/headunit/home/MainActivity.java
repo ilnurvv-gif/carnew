@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.graphics.drawable.Drawable;
-import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,7 +21,6 @@ import android.widget.GridView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.VideoView;
 import android.widget.Toast;
 
 import java.text.SimpleDateFormat;
@@ -66,7 +64,7 @@ public class MainActivity extends Activity {
     private TextView greeting;
     private TextView dateView;
     private SharedPreferences prefs;
-    private VideoView video;
+    private FillVideoView video;
     private View poster;
 
     @Override
@@ -101,25 +99,18 @@ public class MainActivity extends Activity {
     }
 
     private void setupVideo() {
-        try {
-            video.setVideoURI(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.bg));
-            video.setOnPreparedListener(mp -> {
-                mp.setLooping(true);
-                mp.setVolume(0f, 0f);
-                mp.setOnInfoListener((m, what, extra) -> {
-                    if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
-                        poster.setVisibility(View.GONE);
+        video.setSource(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.bg),
+                new FillVideoView.Callback() {
+                    @Override
+                    public void onFirstFrame() {
+                        runOnUiThread(() -> poster.setVisibility(View.GONE));
                     }
-                    return false;
+
+                    @Override
+                    public void onFailed() {
+                        runOnUiThread(() -> poster.setVisibility(View.VISIBLE)); // остаётся картинка
+                    }
                 });
-            });
-            video.setOnErrorListener((mp, what, extra) -> {
-                poster.setVisibility(View.VISIBLE); // видео не заработало: остаётся картинка
-                return true;
-            });
-        } catch (Exception e) {
-            poster.setVisibility(View.VISIBLE);
-        }
     }
 
     @Override
