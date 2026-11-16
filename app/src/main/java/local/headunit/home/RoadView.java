@@ -1,6 +1,8 @@
 package local.headunit.home;
 
 import android.content.Context;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
@@ -14,21 +16,21 @@ import android.view.View;
 import java.util.Random;
 
 /**
- * Фон: ночная дорога, холмы, фонари и чёрный седан, который едет слева направо.
- * Рисуется кодом (без картинок), ~30 кадров/с. Анимация останавливается,
- * когда поверх открыто другое приложение, поэтому магнитолу не грузит.
+ * Фон: ночная дорога, холмы, фонари и ваша машина (фото car.png).
+ * Машина едет влево, поэтому декорации двигаются вправо.
+ * Рисуется ~30 кадров/с, а когда поверх открыто другое приложение,
+ * анимация сама останавливается и магнитолу не грузит.
  */
 public class RoadView extends View {
 
     private final Paint p = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint bmpPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Path path = new Path();
-    private final Path body = new Path();
     private final RectF rect = new RectF();
     private final long t0 = SystemClock.uptimeMillis();
     private final float[] starX = new float[45];
     private final float[] starY = new float[45];
-    private final Shader beam = new LinearGradient(
-            965f, 0f, 1450f, 0f, 0x66FFE9A8, 0x00FFE9A8, Shader.TileMode.CLAMP);
+    private Bitmap car;
     private Shader sky;
     private boolean running;
 
@@ -48,18 +50,7 @@ public class RoadView extends View {
             starX[i] = r.nextFloat();
             starY[i] = r.nextFloat();
         }
-        // Силуэт седана (боком, нос справа) в условных координатах 1000 x 300
-        body.moveTo(28f, 252f);
-        body.lineTo(24f, 196f);
-        body.quadTo(26f, 172f, 60f, 168f);
-        body.lineTo(262f, 162f);
-        body.lineTo(336f, 108f);
-        body.quadTo(440f, 86f, 560f, 98f);
-        body.lineTo(668f, 158f);
-        body.lineTo(880f, 170f);
-        body.quadTo(962f, 178f, 972f, 210f);
-        body.lineTo(972f, 252f);
-        body.close();
+        car = BitmapFactory.decodeResource(getResources(), R.drawable.car);
     }
 
     @Override
@@ -103,14 +94,6 @@ public class RoadView extends View {
         p.setStrokeWidth(width);
     }
 
-    private void poly(Canvas c, float... v) {
-        path.reset();
-        path.moveTo(v[0], v[1]);
-        for (int i = 2; i < v.length; i += 2) path.lineTo(v[i], v[i + 1]);
-        path.close();
-        c.drawPath(path, p);
-    }
-
     private void hills(Canvas c, int w, float baseY, float amp, int color,
                        float shift, float f1, float f2, float ph) {
         path.reset();
@@ -137,6 +120,10 @@ public class RoadView extends View {
         float t = (SystemClock.uptimeMillis() - t0) / 1000f;
         float dist = t * w * 0.22f;
         float roadTop = h * 0.66f;
+
+        // Фон зеркалим: машина едет влево, значит всё остальное уезжает вправо
+        c.save();
+        c.scale(-1f, 1f, w / 2f, 0f);
 
         // небо
         p.setStyle(Paint.Style.FILL);
@@ -182,105 +169,32 @@ public class RoadView extends View {
         float period = dl + gap;
         float doff = -(dist % period);
         fill(0x99C8D0E0);
-        float ly = h * 0.775f;
+        float ly = h * 0.795f;
         for (float x = doff; x < w; x += period) {
             c.drawRect(x, ly, x + dl, ly + 6f, p);
         }
-
-        // машина
-        float len = Math.min(w * 0.46f, h * 0.78f);
-        float s = len / 1000f;
-        float gy = h * 0.72f;
-        float bounce = (float) Math.sin(t * 9f) * 1.2f;
-        float angle = (float) Math.toDegrees(dist / (46f * s)) % 360f;
-        c.save();
-        c.translate(w * 0.5f - len / 2f, gy - 290f * s + bounce);
-        c.scale(s, s);
-        drawCar(c, angle);
         c.restore();
+
+        // машина (фото)
+        if (car != null) {
+            float ch = h * 0.34f;
+            float cw = ch * car.getWidth() / (float) car.getHeight();
+            float cx = w * 0.5f;
+            float bottom = h * 0.78f;
+            float bob = (float) Math.sin(t * 9f) * 1.5f;
+            float tilt = (float) Math.sin(t * 5f + 1f) * 0.4f;
+
+            fill(0x99000000);
+            rect.set(cx - cw * 0.46f, bottom - ch * 0.03f, cx + cw * 0.46f, bottom + ch * 0.05f);
+            c.drawOval(rect, p);
+
+            c.save();
+            c.rotate(tilt, cx, bottom);
+            rect.set(cx - cw / 2f, bottom - ch + bob, cx + cw / 2f, bottom + bob);
+            c.drawBitmap(car, null, rect, bmpPaint);
+            c.restore();
+        }
 
         if (running) postInvalidateDelayed(33);
-    }
-
-    private void drawCar(Canvas c, float angle) {
-        // тень
-        fill(0x99000000);
-        rect.set(20f, 280f, 980f, 300f);
-        c.drawOval(rect, p);
-
-        // свет фар
-        p.setStyle(Paint.Style.FILL);
-        p.setShader(beam);
-        poly(c, 965f, 196f, 1450f, 150f, 1450f, 292f, 965f, 216f);
-        p.setShader(null);
-
-        // кузов
-        fill(0xFF08090D);
-        c.drawPath(body, p);
-        line(0xFF3A4458, 3f);
-        c.drawPath(body, p);
-
-        // блик по линии крыши и пояс кузова
-        line(0xFF6B7791, 2.5f);
-        path.reset();
-        path.moveTo(262f, 162f);
-        path.lineTo(336f, 108f);
-        path.quadTo(440f, 86f, 560f, 98f);
-        path.lineTo(668f, 158f);
-        c.drawPath(path, p);
-        line(0xFF2C3446, 2f);
-        c.drawLine(60f, 172f, 880f, 174f, p);
-
-        // стёкла
-        fill(0xFF1B2638);
-        poly(c, 276f, 160f, 344f, 114f, 444f, 102f, 444f, 160f);
-        poly(c, 460f, 160f, 460f, 102f, 552f, 108f, 648f, 160f);
-
-        // стыки дверей и ручки
-        line(0xFF2C3446, 2f);
-        c.drawLine(300f, 164f, 296f, 246f, p);
-        c.drawLine(452f, 160f, 452f, 246f, p);
-        c.drawLine(640f, 160f, 646f, 246f, p);
-        line(0xFF4A556B, 3f);
-        c.drawLine(410f, 180f, 432f, 180f, p);
-        c.drawLine(570f, 180f, 592f, 180f, p);
-
-        // фары и стоп-сигналы
-        fill(0x44FFE9A8);
-        c.drawCircle(965f, 198f, 26f, p);
-        fill(0xFFFFF0C0);
-        rect.set(938f, 190f, 972f, 206f);
-        c.drawRoundRect(rect, 6f, 6f, p);
-        fill(0x44FF3B30);
-        c.drawCircle(30f, 198f, 22f, p);
-        fill(0xFFFF2D2D);
-        rect.set(24f, 190f, 48f, 206f);
-        c.drawRoundRect(rect, 5f, 5f, p);
-
-        // колёса
-        drawWheel(c, 205f, angle);
-        drawWheel(c, 775f, angle);
-    }
-
-    private void drawWheel(Canvas c, float wx, float angle) {
-        float wy = 244f;
-        line(0xFF2C3446, 3f);
-        c.drawCircle(wx, wy, 56f, p);
-        fill(0xFF0D0E12);
-        c.drawCircle(wx, wy, 46f, p);
-        line(0xFF2A2F3A, 3f);
-        c.drawCircle(wx, wy, 46f, p);
-        fill(0xFF8C95A8);
-        c.drawCircle(wx, wy, 30f, p);
-        c.save();
-        c.rotate(angle, wx, wy);
-        line(0xFF2A3040, 5f);
-        for (int k = 0; k < 5; k++) {
-            c.rotate(72f, wx, wy);
-            c.drawLine(wx, wy, wx + 28f, wy, p);
-        }
-        c.restore();
-        fill(0xFF6D768A);
-        c.drawCircle(wx, wy, 7f, p);
     }
 }
