@@ -2,7 +2,10 @@ package local.headunit.home;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
@@ -79,6 +82,7 @@ public class MainActivity extends Activity {
         video = findViewById(R.id.video);
         poster = findViewById(R.id.poster);
         setupVideo();
+        setupAudioControls();
         greeting = findViewById(R.id.greeting);
         dateView = findViewById(R.id.date);
 
@@ -96,6 +100,37 @@ public class MainActivity extends Activity {
         findViewById(R.id.btn_settings).setOnClickListener(v -> safeStart(Settings.ACTION_SETTINGS));
         findViewById(R.id.btn_apps).setOnClickListener(v ->
                 drawer.setVisibility(drawer.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE));
+    }
+
+    private VolumeBar volBar;
+    private TextView bassBtn;
+    private boolean bassOn;
+    private final BroadcastReceiver volRx = new BroadcastReceiver() {
+        @Override public void onReceive(Context c, Intent i) { if (volBar != null) volBar.refresh(); }
+    };
+
+    private void setupAudioControls() {
+        volBar = findViewById(R.id.vol);
+        bassBtn = findViewById(R.id.btn_bass);
+        SharedPreferences sp = getSharedPreferences("home", MODE_PRIVATE);
+        bassOn = sp.getBoolean("bass", false);
+        if (bassOn && !BassController.set(true)) bassOn = false;
+        paintBass();
+        bassBtn.setOnClickListener(v -> {
+            boolean want = !bassOn;
+            if (BassController.set(want)) {
+                bassOn = want;
+                getSharedPreferences("home", MODE_PRIVATE).edit().putBoolean("bass", bassOn).apply();
+            } else {
+                Toast.makeText(this, "Bass boost не поддерживается этой магнитолой", Toast.LENGTH_LONG).show();
+            }
+            paintBass();
+        });
+    }
+
+    private void paintBass() {
+        bassBtn.setBackgroundResource(bassOn ? R.drawable.bass_on : R.drawable.bass_off);
+        bassBtn.setText(bassOn ? "BASS ON" : "BASS");
     }
 
     private void setupVideo() {
@@ -116,6 +151,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (volBar != null) { volBar.refresh(); registerReceiver(volRx, new IntentFilter("android.media.VOLUME_CHANGED_ACTION")); }
         try { video.start(); } catch (Exception ignored) { }
         handler.removeCallbacks(tick);
         handler.post(tick);
@@ -126,6 +162,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         try { video.pause(); } catch (Exception ignored) { }
         handler.removeCallbacks(tick);
+        try { unregisterReceiver(volRx); } catch (Throwable ignore) {}
         super.onPause();
     }
 
